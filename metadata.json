@@ -1,0 +1,7 @@
+{
+  "name": "FuelVerify AI",
+  "description": "AI-powered petrol usage verification and government reporting assistant for Malaysia.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
