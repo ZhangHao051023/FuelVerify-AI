@@ -12,9 +12,23 @@ View your app in AI Studio: https://ai.studio/apps/c192d849-ece4-41e8-8f07-d1446
 
 **Prerequisites:**  Node.js
 
-
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+2. Copy `.env.example` to `.env.local` and configure:
+   - `VITE_CLOUDFLARE_WORKER_URL` (Cloudflare worker route)
+   - `CF_API_KEY`, `CF_ACCOUNT_ID`, `CF_AI_MODEL`
 3. Run the app:
    `npm run dev`
+
+## Deploy to Cloudflare Worker + Pages
+
+1. Add a Cloudflare worker at `worker/index.ts`.
+2. Configure secrets with Wrangler:
+   - `wrangler secret put CF_API_KEY`
+   - `wrangler secret put CF_ACCOUNT_ID`
+   - `wrangler secret put CF_AI_MODEL`
+3. Deploy worker:
+   `wrangler deploy --env production`
+4. Use deployed worker URL in `VITE_CLOUDFLARE_WORKER_URL`.
+5. Deploy `FuelVerify-AI` app to Cloudflare Pages, ensuring env var points to worker endpoint.
+
