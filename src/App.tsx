@@ -41,6 +41,8 @@ import { verifyUsage } from './services/gemini';
 import { FUEL_PRICES as INITIAL_FUEL_PRICES } from './constants';
 import { fetchLatestFuelPrices, RegionalFuelPrices } from './services/fuelPriceService';
 
+import { getGeminiApiKey } from './lib/config';
+
 import { downloadReport } from './services/reportService';
 
 export default function App() {
@@ -64,9 +66,9 @@ export default function App() {
 
   useEffect(() => {
     const updatePrices = async () => {
-      const apiKey = process.env.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      const apiKey = getGeminiApiKey();
       if (!apiKey) {
-        setPriceUpdateError("Gemini API Key is missing. Please configure it in your deployment environment (VITE_GEMINI_API_KEY).");
+        setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
         return;
       }
       setIsUpdatingPrices(true);
@@ -396,9 +398,16 @@ export default function App() {
                     Source: <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-indigo-500 hover:underline">Google Search (Latest Fuel Prices)</a>
                   </p>
                   {priceUpdateError && (
-                    <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 p-4 text-sm text-rose-600 border border-rose-100">
-                      <AlertTriangle className="h-5 w-5 shrink-0" />
-                      <p>{priceUpdateError}</p>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-4 text-sm text-rose-600 border border-rose-100">
+                        <AlertTriangle className="h-5 w-5 shrink-0" />
+                        <p>{priceUpdateError}</p>
+                      </div>
+                      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-500 overflow-hidden">
+                        <p className="font-bold mb-1 uppercase">Debug Info:</p>
+                        <p>VITE_GEMINI_API_KEY: {(import.meta as any).env.VITE_GEMINI_API_KEY ? 'Detected (starts with ' + (import.meta as any).env.VITE_GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
+                        <p>NODE_ENV: {process.env.NODE_ENV}</p>
+                      </div>
                     </div>
                   )}
                 </div>
