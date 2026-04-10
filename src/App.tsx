@@ -80,9 +80,10 @@ export default function App() {
         } else {
           setPriceUpdateError("Failed to fetch latest prices. Using default rates.");
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Price update error:", err);
-        setPriceUpdateError("API Error: Please check your Gemini API key configuration.");
+        const errorMessage = err?.message || "Unknown API Error";
+        setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
       } finally {
         setIsUpdatingPrices(false);
       }
@@ -405,7 +406,8 @@ export default function App() {
                       </div>
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-500 overflow-hidden">
                         <p className="font-bold mb-1 uppercase">Debug Info:</p>
-                        <p>VITE_GEMINI_API_KEY: {(import.meta as any).env.VITE_GEMINI_API_KEY ? 'Detected (starts with ' + (import.meta as any).env.VITE_GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
+                        <p>VITE_GEMINI_API_KEY: {(import.meta as any).env.VITE_GEMINI_API_KEY ? 'Detected (' + (import.meta as any).env.VITE_GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
+                        <p>GEMINI_API_KEY (env): {process.env.GEMINI_API_KEY ? 'Detected (' + process.env.GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
                         <p>NODE_ENV: {process.env.NODE_ENV}</p>
                       </div>
                     </div>

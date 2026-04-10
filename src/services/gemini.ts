@@ -2,12 +2,18 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { PetrolRecord, VerificationResult } from "../types";
 import { getGeminiApiKey } from "../lib/config";
 
-const ai = new GoogleGenAI({ 
-  apiKey: getGeminiApiKey() 
-});
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+  }
+  return aiInstance;
+}
 
 export const extractReceiptData = async (base64Image: string): Promise<Partial<PetrolRecord>> => {
   try {
+    const ai = getAI();
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
@@ -47,6 +53,7 @@ export const extractReceiptData = async (base64Image: string): Promise<Partial<P
 
 export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[]): Promise<VerificationResult> => {
   try {
+    const ai = getAI();
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [

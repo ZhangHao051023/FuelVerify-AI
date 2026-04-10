@@ -2,9 +2,14 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Zone } from "../types";
 import { getGeminiApiKey } from "../lib/config";
 
-const ai = new GoogleGenAI({ 
-  apiKey: getGeminiApiKey() 
-});
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    aiInstance = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+  }
+  return aiInstance;
+}
 
 export interface FuelPrices {
   RON95: number;
@@ -46,10 +51,13 @@ const FUEL_PRICE_SCHEMA = {
 };
 
 export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null> {
+  const ai = getAI();
+  const prompt = "Search for the latest fuel prices in Malaysia for RON95 (both subsidized and market price), RON97, and Diesel in both West Malaysia and East Malaysia. Also search for the current monthly RON95 subsidy limit (in Liters) as announced by the Malaysian government. Provide the prices in RM (Ringgit Malaysia).";
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: "Search for the latest fuel prices in Malaysia for RON95 (both subsidized and market price), RON97, and Diesel in both West Malaysia and East Malaysia. Also search for the current monthly RON95 subsidy limit (in Liters) as announced by the Malaysian government. Provide the prices in RM (Ringgit Malaysia).",
+      contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
@@ -60,9 +68,24 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     if (response.text) {
       return JSON.parse(response.text.trim()) as RegionalFuelPrices;
     }
-    return null;
   } catch (error) {
-    console.error("Error fetching fuel prices:", error);
-    throw error;
+    console.warn("Fuel price fetch with search tool failed, trying without search tool...", error);
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt + " If you cannot search, please provide the most recent known prices as of your training data.",
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: FUEL_PRICE_SCHEMA,
+        },
+      });
+      if (response.text) {
+        return JSON.parse(response.text.trim()) as RegionalFuelPrices;
+      }
+    } catch (innerError) {
+      console.error("Fuel price fetch failed completely:", innerError);
+      throw innerError;
+    }
   }
+  return null;
 }

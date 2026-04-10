@@ -4,20 +4,22 @@
  * - import.meta.env.VITE_GEMINI_API_KEY: Used in production builds (e.g., Cloudflare Pages).
  */
 export const getGeminiApiKey = (): string => {
+  // 1. Check Vite standard environment variable (highest priority for production)
   try {
-    // @ts-ignore - process might not be defined in all browser environments
-    if (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
-      // @ts-ignore
-      return process.env.GEMINI_API_KEY;
+    const viteKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
+    if (viteKey && viteKey !== "MY_GEMINI_API_KEY" && viteKey.length > 10) {
+      return viteKey;
     }
-  } catch (e) {
-    // Ignore errors from accessing process.env
-  }
+  } catch (e) {}
 
-  // Vite standard environment variable
-  if ((import.meta as any).env.VITE_GEMINI_API_KEY) {
-    return (import.meta as any).env.VITE_GEMINI_API_KEY;
-  }
+  // 2. Check process.env (AI Studio preview)
+  try {
+    // @ts-ignore
+    const processKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : null;
+    if (processKey && processKey !== "MY_GEMINI_API_KEY" && processKey.length > 10) {
+      return processKey;
+    }
+  } catch (e) {}
 
   return "";
 };
