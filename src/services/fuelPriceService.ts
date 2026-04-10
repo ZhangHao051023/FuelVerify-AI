@@ -55,12 +55,11 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     });
 
     if (response.text) {
-      const prices = JSON.parse(response.text.trim()) as RegionalFuelPrices;
-      return prices;
+      return JSON.parse(response.text.trim()) as RegionalFuelPrices;
     }
     return null;
   } catch (error) {
     console.error("Error fetching fuel prices:", error);
-    return null;
+    throw error;
   }
 }

@@ -52,6 +52,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'records' | 'analytics' | 'settings' | 'reports'>('dashboard');
   const [fuelPrices, setFuelPrices] = useState<RegionalFuelPrices>(INITIAL_FUEL_PRICES);
   const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+  const [priceUpdateError, setPriceUpdateError] = useState<string | null>(null);
   const [zone, setZone] = useState<Zone>(() => {
     const saved = localStorage.getItem('fuel_zone');
     return (saved as Zone) || 'West Malaysia';
@@ -63,12 +64,25 @@ export default function App() {
 
   useEffect(() => {
     const updatePrices = async () => {
-      setIsUpdatingPrices(true);
-      const latest = await fetchLatestFuelPrices();
-      if (latest) {
-        setFuelPrices(latest);
+      if (!process.env.GEMINI_API_KEY) {
+        setPriceUpdateError("Gemini API Key is missing. Please configure it in the Secrets panel.");
+        return;
       }
-      setIsUpdatingPrices(false);
+      setIsUpdatingPrices(true);
+      setPriceUpdateError(null);
+      try {
+        const latest = await fetchLatestFuelPrices();
+        if (latest) {
+          setFuelPrices(latest);
+        } else {
+          setPriceUpdateError("Failed to fetch latest prices. Using default rates.");
+        }
+      } catch (err) {
+        console.error("Price update error:", err);
+        setPriceUpdateError("API Error: Please check your Gemini API key configuration.");
+      } finally {
+        setIsUpdatingPrices(false);
+      }
     };
     updatePrices();
   }, []);
@@ -380,6 +394,12 @@ export default function App() {
                   <p className="mt-2 text-xs text-slate-400">
                     Source: <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-indigo-500 hover:underline">Google Search (Latest Fuel Prices)</a>
                   </p>
+                  {priceUpdateError && (
+                    <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 p-4 text-sm text-rose-600 border border-rose-100">
+                      <AlertTriangle className="h-5 w-5 shrink-0" />
+                      <p>{priceUpdateError}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
