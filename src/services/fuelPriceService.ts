@@ -52,9 +52,10 @@ const FUEL_PRICE_SCHEMA = {
 
 export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null> {
   const ai = getAI();
-  const prompt = "Search for the latest fuel prices in Malaysia for RON95 (both subsidized and market price), RON97, and Diesel in both West Malaysia and East Malaysia. Also search for the current monthly RON95 subsidy limit (in Liters) as announced by the Malaysian government. Provide the prices in RM (Ringgit Malaysia).";
+  const prompt = "Search for the latest fuel prices in Malaysia for RON95 (both subsidized and market price), RON97, and Diesel in both West Malaysia and East Malaysia. Also search for the current monthly RON95 subsidy limit (in Liters) as announced by the Malaysian government (it should be around 200 Liters). Provide the prices in RM (Ringgit Malaysia).";
 
   try {
+    console.log("Attempting to fetch fuel prices with search tool...");
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -66,6 +67,7 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     });
 
     if (response.text) {
+      console.log("Fuel prices fetched successfully with search tool.");
       return JSON.parse(response.text.trim()) as RegionalFuelPrices;
     }
   } catch (error) {
@@ -73,13 +75,14 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     try {
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt + " If you cannot search, please provide the most recent known prices as of your training data.",
+        contents: prompt + " If you cannot search, please provide the most recent known prices as of your training data. Use 200 Liters as the subsidy limit if unsure.",
         config: {
           responseMimeType: "application/json",
           responseSchema: FUEL_PRICE_SCHEMA,
         },
       });
       if (response.text) {
+        console.log("Fuel prices fetched successfully without search tool (fallback).");
         return JSON.parse(response.text.trim()) as RegionalFuelPrices;
       }
     } catch (innerError) {

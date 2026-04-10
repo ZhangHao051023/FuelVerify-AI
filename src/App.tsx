@@ -20,7 +20,8 @@ import {
   X,
   BarChart3,
   MapPin,
-  Tag
+  Tag,
+  RefreshCw
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -395,9 +396,44 @@ export default function App() {
                 <div className="mb-8">
                   <h3 className="text-xl font-bold text-slate-900">Regional Settings</h3>
                   <p className="text-slate-500 text-sm">Select your location to ensure accurate fuel price calculations.</p>
-                  <p className="mt-2 text-xs text-slate-400">
-                    Source: <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-indigo-500 hover:underline">Google Search (Latest Fuel Prices)</a>
-                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-xs text-indigo-500 hover:underline">
+                      Source: Google Search (Latest Fuel Prices)
+                    </a>
+                    <button 
+                      onClick={() => {
+                        const updatePrices = async () => {
+                          const apiKey = getGeminiApiKey();
+                          if (!apiKey) {
+                            setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
+                            return;
+                          }
+                          setIsUpdatingPrices(true);
+                          setPriceUpdateError(null);
+                          try {
+                            const latest = await fetchLatestFuelPrices();
+                            if (latest) {
+                              setFuelPrices(latest);
+                            } else {
+                              setPriceUpdateError("Failed to fetch latest prices. Using default rates.");
+                            }
+                          } catch (err: any) {
+                            console.error("Price update error:", err);
+                            const errorMessage = err?.message || "Unknown API Error";
+                            setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
+                          } finally {
+                            setIsUpdatingPrices(false);
+                          }
+                        };
+                        updatePrices();
+                      }}
+                      disabled={isUpdatingPrices}
+                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${isUpdatingPrices ? 'animate-spin' : ''}`} />
+                      {isUpdatingPrices ? 'Updating...' : 'Refresh Prices Now'}
+                    </button>
+                  </div>
                   {priceUpdateError && (
                     <div className="mt-4 space-y-2">
                       <div className="flex items-center gap-2 rounded-xl bg-rose-50 p-4 text-sm text-rose-600 border border-rose-100">
