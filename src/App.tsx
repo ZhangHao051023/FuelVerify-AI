@@ -64,8 +64,9 @@ export default function App() {
 
   useEffect(() => {
     const updatePrices = async () => {
-      if (!process.env.GEMINI_API_KEY) {
-        setPriceUpdateError("Gemini API Key is missing. Please configure it in the Secrets panel.");
+      const apiKey = process.env.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        setPriceUpdateError("Gemini API Key is missing. Please configure it in your deployment environment (VITE_GEMINI_API_KEY).");
         return;
       }
       setIsUpdatingPrices(true);

@@ -1,7 +1,9 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { PetrolRecord, VerificationResult } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+const ai = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY || (import.meta as any).env.VITE_GEMINI_API_KEY || "" 
+});
 
 export const extractReceiptData = async (base64Image: string): Promise<Partial<PetrolRecord>> => {
   try {
