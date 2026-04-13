@@ -34,13 +34,13 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { PetrolRecord, Zone } from './types';
+import { PetrolRecord, Zone, RegionalFuelPrices } from './types';
 import { RecordCard } from './components/RecordCard';
 import { UploadModal } from './components/UploadModal';
 import { RecordForm } from './components/RecordForm';
 import { verifyUsage } from './services/gemini';
 import { FUEL_PRICES as INITIAL_FUEL_PRICES } from './constants';
-import { fetchLatestFuelPrices, RegionalFuelPrices } from './services/fuelPriceService';
+import { fetchLatestFuelPrices } from './services/fuelPriceService';
 
 import { getGeminiApiKey } from './lib/config';
 
@@ -345,6 +345,61 @@ export default function App() {
                 </div>
 
                 <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
+                  <div className="mb-6 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="rounded-2xl bg-indigo-50 p-3 text-indigo-600">
+                        <Fuel className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold">Current Fuel Prices</h3>
+                        <p className="text-sm text-slate-500">{zone} Rates</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentView('settings')}
+                      className="text-xs font-bold text-indigo-600 hover:underline"
+                    >
+                      Update Settings
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">RON95 (Sub)</p>
+                      <p className="text-xl font-bold text-slate-900">RM {fuelPrices[zone].RON95.toFixed(2)}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">RON95 (Mkt)</p>
+                      <p className="text-xl font-bold text-slate-900">RM {fuelPrices[zone].RON95_Market.toFixed(2)}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">RON97</p>
+                      <p className="text-xl font-bold text-slate-900">RM {fuelPrices[zone].RON97.toFixed(2)}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Diesel</p>
+                      <p className="text-xl font-bold text-slate-900">RM {fuelPrices[zone].Diesel.toFixed(2)}</p>
+                    </div>
+                  </div>
+                  {(fuelPrices[zone].source || fuelPrices[zone].date) && (
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 italic">
+                        <span>Source: {fuelPrices[zone].source || 'Web Search'}</span>
+                        {fuelPrices[zone].date && <span>Updated: {fuelPrices[zone].date}</span>}
+                      </div>
+                      {fuelPrices[zone].analysis && (
+                        <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 text-[10px] text-indigo-700 leading-relaxed">
+                          <div className="flex items-center gap-1 font-bold mb-1 uppercase tracking-wider">
+                            <ShieldCheck className="h-3 w-3" />
+                            AI Worker Analysis
+                          </div>
+                          {fuelPrices[zone].analysis}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-200">
                   <div className="mb-6 flex items-center gap-4">
                     <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
                       <TrendingUp className="h-6 w-6" />
@@ -396,43 +451,63 @@ export default function App() {
                 <div className="mb-8">
                   <h3 className="text-xl font-bold text-slate-900">Regional Settings</h3>
                   <p className="text-slate-500 text-sm">Select your location to ensure accurate fuel price calculations.</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-xs text-indigo-500 hover:underline">
-                      Source: Google Search (Latest Fuel Prices)
-                    </a>
-                    <button 
-                      onClick={() => {
-                        const updatePrices = async () => {
-                          const apiKey = getGeminiApiKey();
-                          if (!apiKey) {
-                            setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
-                            return;
-                          }
-                          setIsUpdatingPrices(true);
-                          setPriceUpdateError(null);
-                          try {
-                            const latest = await fetchLatestFuelPrices();
-                            if (latest) {
-                              setFuelPrices(latest);
-                            } else {
-                              setPriceUpdateError("Failed to fetch latest prices. Using default rates.");
+                  <div className="mt-4 flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <a href="https://www.google.com/search?q=fuel+price+malaysia" target="_blank" rel="noopener" className="text-xs text-indigo-500 hover:underline flex items-center gap-1">
+                        <Search className="h-3 w-3" />
+                        Source: {fuelPrices[zone].source || 'Google Search (Latest Fuel Prices)'}
+                      </a>
+                      {fuelPrices[zone].date && (
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-medium">
+                          Effective: {fuelPrices[zone].date}
+                        </span>
+                      )}
+                      <button 
+                        onClick={() => {
+                          const updatePrices = async () => {
+                            const apiKey = getGeminiApiKey();
+                            if (!apiKey) {
+                              setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
+                              return;
                             }
-                          } catch (err: any) {
-                            console.error("Price update error:", err);
-                            const errorMessage = err?.message || "Unknown API Error";
-                            setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
-                          } finally {
-                            setIsUpdatingPrices(false);
-                          }
-                        };
-                        updatePrices();
-                      }}
-                      disabled={isUpdatingPrices}
-                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`h-3 w-3 ${isUpdatingPrices ? 'animate-spin' : ''}`} />
-                      {isUpdatingPrices ? 'Updating...' : 'Refresh Prices Now'}
-                    </button>
+                            setIsUpdatingPrices(true);
+                            setPriceUpdateError(null);
+                            try {
+                              const latest = await fetchLatestFuelPrices();
+                              if (latest) {
+                                setFuelPrices(latest);
+                              } else {
+                                setPriceUpdateError("Failed to fetch latest prices. Using default rates.");
+                              }
+                            } catch (err: any) {
+                              console.error("Price update error:", err);
+                              const errorMessage = err?.message || "Unknown API Error";
+                              setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
+                            } finally {
+                              setIsUpdatingPrices(false);
+                            }
+                          };
+                          updatePrices();
+                        }}
+                        disabled={isUpdatingPrices}
+                        className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-700 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isUpdatingPrices ? 'animate-spin' : ''}`} />
+                        {isUpdatingPrices ? 'Updating...' : 'Refresh Prices Now'}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic">
+                      Prices are automatically retrieved by AI searching the web for the latest government announcements.
+                    </p>
+                    {fuelPrices[zone].analysis && (
+                      <div className="mt-4 p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 text-xs text-indigo-700 leading-relaxed">
+                        <div className="flex items-center gap-2 font-bold mb-2 uppercase tracking-wider text-[10px]">
+                          <ShieldCheck className="h-4 w-4" />
+                          AI Analysis Report
+                        </div>
+                        {fuelPrices[zone].analysis}
+                      </div>
+                    )}
                   </div>
                   {priceUpdateError && (
                     <div className="mt-4 space-y-2">

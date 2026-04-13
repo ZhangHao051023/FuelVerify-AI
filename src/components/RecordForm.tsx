@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { PetrolRecord, Zone } from '../types';
+import { PetrolRecord, Zone, RegionalFuelPrices } from '../types';
 import { X, Save, Calendar, MapPin, Gauge, Fuel, DollarSign, Tag } from 'lucide-react';
 import { format } from 'date-fns';
-import { RegionalFuelPrices } from '../services/fuelPriceService';
 
 interface RecordFormProps {
   initialData?: Partial<PetrolRecord>;
