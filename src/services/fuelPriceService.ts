@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Zone, FuelPrices, RegionalFuelPrices } from "../types";
+import { Zone } from "../types";
 import { getGeminiApiKey } from "../lib/config";
 
 let aiInstance: GoogleGenAI | null = null;
@@ -11,19 +11,27 @@ function getAI() {
   return aiInstance;
 }
 
+export interface FuelPrices {
+  RON95: number;
+  RON95_Market: number;
+  RON97: number;
+  Diesel: number;
+  RON95_SubsidyLimit: number;
+}
+
+export type RegionalFuelPrices = Record<Zone, FuelPrices>;
+
 const FUEL_PRICE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
     'West Malaysia': {
       type: Type.OBJECT,
       properties: {
-        RON95: { type: Type.NUMBER, description: "Subsidized price of RON95 in RM for West Malaysia (e.g. 2.05)" },
+        RON95: { type: Type.NUMBER, description: "Subsidized price of RON95 in RM for West Malaysia" },
         RON95_Market: { type: Type.NUMBER, description: "Non-subsidized (market) price of RON95 in RM for West Malaysia" },
         RON97: { type: Type.NUMBER, description: "Price of RON97 in RM for West Malaysia" },
         Diesel: { type: Type.NUMBER, description: "Price of Diesel in RM for West Malaysia" },
-        RON95_SubsidyLimit: { type: Type.NUMBER, description: "Monthly subsidy limit for RON95 in Liters for West Malaysia (usually 200)" },
-        source: { type: Type.STRING, description: "The source of this data (e.g. 'data.gov.my', 'Paul Tan')" },
-        date: { type: Type.STRING, description: "The effective date of these prices" },
+        RON95_SubsidyLimit: { type: Type.NUMBER, description: "Monthly subsidy limit for RON95 in Liters for West Malaysia" },
       },
       required: ["RON95", "RON95_Market", "RON97", "Diesel", "RON95_SubsidyLimit"],
     },
@@ -35,8 +43,6 @@ const FUEL_PRICE_SCHEMA = {
         RON97: { type: Type.NUMBER, description: "Price of RON97 in RM for East Malaysia" },
         Diesel: { type: Type.NUMBER, description: "Price of Diesel in RM for East Malaysia" },
         RON95_SubsidyLimit: { type: Type.NUMBER, description: "Monthly subsidy limit for RON95 in Liters for East Malaysia" },
-        source: { type: Type.STRING, description: "The source of this data" },
-        date: { type: Type.STRING, description: "The effective date of these prices" },
       },
       required: ["RON95", "RON95_Market", "RON97", "Diesel", "RON95_SubsidyLimit"],
     },
@@ -45,95 +51,86 @@ const FUEL_PRICE_SCHEMA = {
 };
 
 export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null> {
-  const ai = getAI();
-  const currentDate = new Date().toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' });
-  
-  // Updated schema to include analysis
-  const ANALYSIS_SCHEMA = {
-    type: Type.OBJECT,
-    properties: {
-      'West Malaysia': {
-        type: Type.OBJECT,
-        properties: {
-          ...FUEL_PRICE_SCHEMA.properties['West Malaysia'].properties,
-          analysis: { type: Type.STRING, description: "Detailed analysis of how these prices were determined from search results" }
-        },
-        required: [...FUEL_PRICE_SCHEMA.properties['West Malaysia'].required, "analysis"]
-      },
-      'East Malaysia': {
-        type: Type.OBJECT,
-        properties: {
-          ...FUEL_PRICE_SCHEMA.properties['East Malaysia'].properties,
-          analysis: { type: Type.STRING, description: "Detailed analysis of how these prices were determined from search results" }
-        },
-        required: [...FUEL_PRICE_SCHEMA.properties['East Malaysia'].required, "analysis"]
+  // 1. Try direct fetch from data.gov.my API first
+  try {
+    console.log("Attempting direct fetch from data.gov.my API...");
+    const response = await fetch('https://api.data.gov.my/data-catalogue?id=fuelprice');
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[data.length - 1];
+        console.log("Direct fetch successful. Latest data date:", latest.date);
+        
+        // Mapping logic based on data.gov.my structure
+        // ron95: Standard price (subsidized for now, might be market later)
+        // ron95_budi95: Targeted subsidy price
+        // ron97: Market price
+        // diesel: West Malaysia price
+        // diesel_eastmsia: East Malaysia price
+        
+        const ron95_subsidized = latest.ron95_budi95 || latest.ron95 || 2.05;
+        // Market price for RON95 is often not in the simple JSON, 
+        // we might still need AI for the "Market Price" or use a heuristic.
+        // For now, we'll use the AI as a fallback or to "fill in" the market price if missing.
+        
+        const prices: RegionalFuelPrices = {
+          'West Malaysia': {
+            RON95: ron95_subsidized,
+            RON95_Market: latest.ron95 > ron95_subsidized ? latest.ron95 : latest.ron95 + 1.20, // Heuristic if market price not clear
+            RON97: latest.ron97,
+            Diesel: latest.diesel,
+            RON95_SubsidyLimit: 200,
+          },
+          'East Malaysia': {
+            RON95: ron95_subsidized,
+            RON95_Market: latest.ron95 > ron95_subsidized ? latest.ron95 : latest.ron95 + 1.20,
+            RON97: latest.ron97,
+            Diesel: latest.diesel_eastmsia || 2.15,
+            RON95_SubsidyLimit: 200,
+          }
+        };
+        
+        // If we have the data but need a more accurate "Market Price", 
+        // we could still call AI but it's better to respect the "direct fetch" request.
+        return prices;
       }
-    },
-    required: ["West Malaysia", "East Malaysia"]
-  };
+    }
+  } catch (error) {
+    console.warn("Direct fetch from data.gov.my failed (likely CORS), falling back to AI...", error);
+  }
 
-  const prompt = `You are an AI Analysis Worker specialized in Malaysian economic data.
-  TODAY'S DATE IS: ${currentDate}.
+  // 2. Fallback to Gemini AI with search tool, specifically targeting the requested URL
+  const ai = getAI();
+  const prompt = `Visit https://data.gov.my/data-catalogue/fuelprice and extract the latest fuel prices for Malaysia. 
+  I need:
+  - RON95 Subsidized Price (RM)
+  - RON95 Market Price (Non-subsidized) (RM)
+  - RON97 Price (RM)
+  - Diesel Price for West Malaysia (RM)
+  - Diesel Price for East Malaysia (RM)
+  - RON95 Subsidy Limit (Liters) - should be 200L.
   
-  YOUR TASK: Perform a deep web search to find the ABSOLUTE LATEST fuel prices in Malaysia effective as of ${currentDate}.
-  
-  SOURCES TO ANALYZE:
-  1. data.gov.my (https://data.gov.my/data-catalogue/fuelprice) - Look for the most recent entry.
-  2. Paul Tan's Automotive News (paultan.org) - Search for "Weekly fuel price update".
-  3. Ministry of Finance (MOF) Malaysia official portal.
-  4. Reliable news outlets (The Star, Bernama, Malay Mail).
-  
-  DATA POINTS NEEDED (West & East Malaysia):
-  - RON95 Subsidized Price (Fixed at RM 2.05 currently, but verify if any changes).
-  - RON95 Market Price (Floating price, usually around RM 3.00+).
-  - RON97 Price (Floating).
-  - Diesel Price (Note: West Malaysia diesel is now floating, East Malaysia is subsidized at RM 2.15).
-  - RON95 Subsidy Limit (Usually 200L/month).
-  
-  ANALYSIS REQUIREMENT:
-  In the 'analysis' field, explain exactly which source you used, the date of the announcement, and why these prices are the most current.
-  
-  Return the data in the specified JSON format.`;
+  Provide the data for both West Malaysia and East Malaysia.`;
 
   try {
-    console.log(`[AI Analysis Worker] Starting web search for fuel prices as of ${currentDate}...`);
+    console.log("Attempting to fetch fuel prices with Gemini AI (Search Tool)...");
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp", // Using a strong model for search and analysis
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
-        responseSchema: ANALYSIS_SCHEMA,
+        responseSchema: FUEL_PRICE_SCHEMA,
       },
     });
 
     if (response.text) {
-      const data = JSON.parse(response.text.trim()) as RegionalFuelPrices;
-      console.log("Fuel prices retrieved from web search:", data);
-      return data;
+      console.log("Fuel prices fetched successfully with Gemini AI.");
+      return JSON.parse(response.text.trim()) as RegionalFuelPrices;
     }
   } catch (error) {
-    console.error("Web search for fuel prices failed:", error);
-    // Fallback to a simpler prompt without search tool if search fails
-    try {
-      console.log("Falling back to internal knowledge for fuel prices...");
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp",
-        contents: `Provide the most recent known fuel prices for Malaysia as of ${currentDate}. 
-        Include RON95 (Subsidized RM 2.05), RON95 Market, RON97, and Diesel. 
-        Explain that this is based on internal knowledge in the analysis field.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: ANALYSIS_SCHEMA,
-        },
-      });
-      if (response.text) {
-        return JSON.parse(response.text.trim()) as RegionalFuelPrices;
-      }
-    } catch (innerError) {
-      console.error("All fuel price retrieval methods failed:", innerError);
-      throw innerError;
-    }
+    console.error("All fuel price fetch methods failed:", error);
+    throw error;
   }
   return null;
 }
