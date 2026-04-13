@@ -122,6 +122,10 @@ export default function App() {
     setIsFormOpen(true);
   };
 
+  const handleDeleteRecord = (id: string) => {
+    setRecords(prev => prev.filter(r => r.id !== id));
+  };
+
   const stats = {
     totalSpent: records.reduce((acc, r) => acc + r.amount, 0),
     totalLiters: records.reduce((acc, r) => acc + r.liters, 0),
@@ -554,7 +558,10 @@ export default function App() {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.9 }}
                       >
-                        <RecordCard record={record} />
+                        <RecordCard 
+                          record={record} 
+                          onDelete={() => handleDeleteRecord(record.id)}
+                        />
                       </motion.div>
                     ))}
                   </AnimatePresence>
@@ -716,6 +723,13 @@ export default function App() {
                                 {record.status}
                               </span>
                               <span className="text-sm font-medium text-slate-500">{record.date}</span>
+                              <button 
+                                onClick={() => handleDeleteRecord(record.id)}
+                                className="ml-auto p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Delete record"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
                             </div>
                             <h4 className="text-lg font-bold text-slate-900">{record.stationName}</h4>
                             <div className="flex items-center gap-4 text-sm text-slate-600">
