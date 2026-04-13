@@ -58,8 +58,14 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     if (response.ok) {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
-        const latest = data[data.length - 1];
-        console.log("Direct fetch successful. Latest data date:", latest.date);
+        // Filter for 'level' series type to get actual prices, not weekly changes
+        const levelData = data.filter((item: any) => item.series_type === 'level');
+        if (levelData.length === 0) {
+          throw new Error("No 'level' series data found in API response");
+        }
+        
+        const latest = levelData[levelData.length - 1];
+        console.log("Direct fetch successful. Latest data date:", latest.date, "Series type:", latest.series_type);
         
         // Mapping logic based on data.gov.my structure
         // ron95: Standard price (subsidized for now, might be market later)
@@ -68,30 +74,26 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
         // diesel: West Malaysia price
         // diesel_eastmsia: East Malaysia price
         
-        const ron95_subsidized = latest.ron95_budi95 || latest.ron95 || 2.05;
-        // Market price for RON95 is often not in the simple JSON, 
-        // we might still need AI for the "Market Price" or use a heuristic.
-        // For now, we'll use the AI as a fallback or to "fill in" the market price if missing.
+        const ron95_subsidized = latest.ron95_budi95 || 2.05; // Default subsidized price if budi95 missing
+        const ron95_market = latest.ron95 || ron95_subsidized + 1.20; // Use ron95 as market price if it's higher
         
         const prices: RegionalFuelPrices = {
           'West Malaysia': {
             RON95: ron95_subsidized,
-            RON95_Market: latest.ron95 > ron95_subsidized ? latest.ron95 : latest.ron95 + 1.20, // Heuristic if market price not clear
+            RON95_Market: Math.max(ron95_market, ron95_subsidized + 0.50), // Ensure market is higher
             RON97: latest.ron97,
             Diesel: latest.diesel,
             RON95_SubsidyLimit: 200,
           },
           'East Malaysia': {
             RON95: ron95_subsidized,
-            RON95_Market: latest.ron95 > ron95_subsidized ? latest.ron95 : latest.ron95 + 1.20,
+            RON95_Market: Math.max(ron95_market, ron95_subsidized + 0.50),
             RON97: latest.ron97,
             Diesel: latest.diesel_eastmsia || 2.15,
             RON95_SubsidyLimit: 200,
           }
         };
         
-        // If we have the data but need a more accurate "Market Price", 
-        // we could still call AI but it's better to respect the "direct fetch" request.
         return prices;
       }
     }
