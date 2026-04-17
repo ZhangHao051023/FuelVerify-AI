@@ -38,4 +38,4 @@ RUN npm install tsx
 EXPOSE 3000
 
 # Start the server
-CMD ["npx", "tsx", "server.ts"]
+CMD ["npm", "start"]
