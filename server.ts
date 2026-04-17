@@ -129,7 +129,7 @@ async function startServer() {
         return res.status(500).json({ error: "GEMINI_API_KEY is missing on server." });
       }
 
-      console.log(`Starting AI verification for record in ${record.station}...`);
+      console.log(`Starting AI verification for record in ${record.stationName || 'unknown station'}...`);
       const client = new GoogleGenAI({ apiKey });
       const prompt = `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
           
@@ -137,10 +137,10 @@ async function startServer() {
           ${JSON.stringify(record, null, 2)}
           
           History (Last 5 records):
-          ${JSON.stringify(history.slice(0, 5), null, 2)}
+          ${JSON.stringify((history || []).slice(0, 5), null, 2)}
           
           Policy Rules:
-          1. Duplicate check: Same date, amount, and station is highly suspicious.
+          1. Duplicate check: Same date, amount, and station name is highly suspicious.
           2. Consumption check: Unrealistic fuel consumption for standard cars.
           3. Frequency check: Multiple full tanks on the same day.
           
@@ -152,7 +152,7 @@ async function startServer() {
 
       const response = await client.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: prompt,
         config: {
           responseMimeType: "application/json",
         },

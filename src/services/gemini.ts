@@ -81,23 +81,24 @@ export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[])
     });
 
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
     }
 
     return await response.json();
-  } catch (e) {
-    console.error("Verification failed (server fallback)", e);
+  } catch (e: any) {
+    console.warn("Verification failed (server fallback), attempting local...", e.message);
     // Local fallback if server fails and we have a local key
     try {
       const apiKey = getGeminiApiKey();
-      if (!apiKey) throw new Error("No local API key");
+      if (!apiKey) throw new Error("No local API key available for fallback.");
       
       const ai = getAI();
+      if (!ai) throw new Error("AI instance could not be initialized.");
+
       const response: GenerateContentResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [
-          {
-            text: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
+        contents: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
             
             Current Record:
             ${JSON.stringify(record, null, 2)}
@@ -110,16 +111,18 @@ export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[])
               "status": "verified" | "flagged",
               "notes": ["List of observations"]
             }`,
-          },
-        ],
         config: {
           responseMimeType: "application/json",
         },
       });
 
-      return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error in verification"]}');
-    } catch (innerError) {
-      return { status: "flagged", notes: ["Verification failed to process"] };
+      return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error parsing local AI response"]}');
+    } catch (innerError: any) {
+      console.error("Verification failed completely:", innerError.message);
+      return { 
+        status: "flagged", 
+        notes: [`Verification unavailable: ${e.message}. Please check if GEMINI_API_KEY is configured in Cloud Run.`] 
+      };
     }
   }
 };
