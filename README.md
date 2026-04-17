@@ -21,24 +21,31 @@ The app uses a two-tier system for fuel prices:
 ### 2. AI Verification Layer
 When you upload a record, Gemini AI performs a "sanity check" by comparing the receipt date, fuel type, and volume against the historical prices for that specific period. If there is a mismatch (e.g., you recorded RON95 at RON97 prices), the app will **Flag** the record for review.
 
-## 🚀 Getting Started
+## 🚀 Deployment & Setup
 
-### Prerequisites
-*   **Gemini API Key:** An API key is required for receipt extraction and AI verification features. You can get one for free at [Google AI Studio](https://aistudio.google.com/).
+### Local Setup
+1. Enter your **Gemini API Key** in the platform settings.
+2. Select your **Zone** (West or East Malaysia) in the app settings.
 
-### Setup
-1.  Enter your **Gemini API Key** in the platform settings.
-2.  Open the **Settings** tab in the app.
-3.  Select your **Zone** (West or East Malaysia).
-4.  Click **Refresh Prices Now** to pull the latest government data.
+### Google Cloud Run Deployment
+To deploy this application to Google Cloud Run:
+
+1.  **Configure GEMINI_API_KEY (Critical):**
+    The application requires a Gemini API Key to fetch live fuel prices and perform AI usage verification on the server.
+    - **Recommended:** Store your key in **GCP Secret Manager** as `GEMINI_API_KEY`.
+    - Grant the **Secret Manager Secret Accessor** role (`roles/secretmanager.secretAccessor`) to your Cloud Run Service Account (e.g., `...-compute@developer.gserviceaccount.com`).
+    - Map the secret to an environment variable named `GEMINI_API_KEY` in your Cloud Run service settings.
+
+2.  **Verification:**
+    Once deployed, check the application logs. You should see `GEMINI_API_KEY present: true`. If `false`, AI features will be disabled.
 
 ## 💻 Tech Stack
 
-*   **Frontend:** React 18, TypeScript, Tailwind CSS
+*   **Frontend:** React 19, TypeScript, Tailwind CSS
+*   **Backend:** Node.js + Express (API Proxy & Server-side AI)
 *   **Animations:** Framer Motion
-*   **Charts:** Recharts
-*   **AI Integration:** Google Generative AI (Gemini 1.5 Flash)
-*   **Icons:** Lucide React
+*   **AI Integration:** Google Generative AI (Gemini 2.0 / 1.5)
+*   **Cloud:** Docker + Google Cloud Run
 
 ## ⚠️ Disclaimer
 

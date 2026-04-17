@@ -13,9 +13,13 @@ async function startServer() {
 
   // API Proxy for Fuel Prices to avoid CORS issues in production
   app.get("/api/fuel-prices", async (req, res) => {
+    let governmentDataMatch = false;
+    let fuelData: any = null;
+
     try {
-      console.log("Proxying request to data.gov.my...");
-      const response = await fetch('https://api.data.gov.my/data-catalogue?id=fuelprice', {
+      console.log("Proxying request to data.gov.my with latest filters...");
+      // Fetch latest 10 entries to ensure we find a 'level' entry that is recent
+      const response = await fetch('https://api.data.gov.my/data-catalogue?id=fuelprice&limit=20&sort=-date', {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -23,11 +27,44 @@ async function startServer() {
       
       if (response.ok) {
         const data = await response.json();
-        console.log("Proxy fetch successful");
-        return res.json(data);
+        if (Array.isArray(data)) {
+          const levelData = data.filter((item: any) => item.series_type === 'level');
+          if (levelData.length > 0) {
+            const latest = levelData[0]; // Since we sorted by -date
+            console.log(`Found level data from ${latest.date}: RON95=${latest.ron95}, RON97=${latest.ron97}`);
+            
+            // Logic check: if prices are suspiciously low (e.g. 0.40), treat as invalid
+            if (latest.ron95 > 1.0) {
+              const ron95_subsidized = latest.ron95_budi95 || 2.05;
+              const ron95_market = latest.ron95 || (ron95_subsidized + 1.20);
+              
+              fuelData = {
+                "West Malaysia": {
+                  "RON95": ron95_subsidized,
+                  "RON95_Market": Math.max(ron95_market, ron95_subsidized + 0.50),
+                  "RON97": latest.ron97,
+                  "Diesel": latest.diesel,
+                  "RON95_SubsidyLimit": 200
+                },
+                "East Malaysia": {
+                  "RON95": ron95_subsidized,
+                  "RON95_Market": Math.max(ron95_market, ron95_subsidized + 0.50),
+                  "RON97": latest.ron97,
+                  "Diesel": latest.diesel_eastmsia || 2.15,
+                  "RON95_SubsidyLimit": 200
+                }
+              };
+              governmentDataMatch = true;
+              console.log("Government data validated and mapped successfully.");
+              return res.json({ _isAI: false, ...fuelData });
+            } else {
+              console.warn("Government data found but prices look unrealistic (< RM1.0). Falling back to AI.");
+            }
+          }
+        }
       }
       
-      console.warn(`Government API responded with ${response.status}. Falling back to AI...`);
+      console.warn(`Government API responded with ${response.status} or invalid data structure.`);
     } catch (error: any) {
       console.error("Proxy fetch error, falling back to AI:", error.message);
     }
@@ -42,8 +79,17 @@ async function startServer() {
       console.log("Attempting to fetch fuel prices using Gemini AI (Search Tool) on server...");
       const client = new GoogleGenAI({ apiKey });
       
-      const prompt = `Search for the LATEST fuel prices in Malaysia (RON95, RON97, Diesel). 
-      Format the data for West Malaysia and East Malaysia.
+      const prompt = `Search for the MOST RECENT and LATEST fuel prices in Malaysia as of April 2026. 
+      The current market prices for RON95 is around RM3.20 - RM3.50, while subsidized is RM2.05.
+      RON97 varies, Diesel is around RM3.35 in West Malaysia and RM2.15 in East Malaysia.
+      
+      Find the exact current prices for:
+      - RON95 (Subsidized)
+      - RON95 (Market/Unsubsidized)
+      - RON97
+      - Diesel (West Malaysia)
+      - Diesel (East Malaysia)
+      
       Return ONLY a JSON object in this format:
       {
         "West Malaysia": { "RON95": 2.05, "RON95_Market": 3.20, "RON97": 3.47, "Diesel": 3.35, "RON95_SubsidyLimit": 200 },
@@ -51,12 +97,14 @@ async function startServer() {
       }`;
 
       const result = await client.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         tools: [{ googleSearch: {} }] as any,
       } as any);
 
       const text = result.text || "";
+      console.log("AI Response received (length):", text.length);
+      console.log("AI Raw Text Snippet:", text.substring(0, 200));
       // Extract JSON block if it exists
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       const cleanedJson = jsonMatch ? jsonMatch[0] : text;
@@ -77,9 +125,11 @@ async function startServer() {
       const apiKey = process.env.GEMINI_API_KEY;
       
       if (!apiKey) {
+        console.error("Verification failed: GEMINI_API_KEY not found in environment.");
         return res.status(500).json({ error: "GEMINI_API_KEY is missing on server." });
       }
 
+      console.log(`Starting AI verification for record in ${record.station}...`);
       const client = new GoogleGenAI({ apiKey });
       const prompt = `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
           
@@ -101,14 +151,24 @@ async function startServer() {
           }`;
 
       const response = await client.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
         },
       } as any);
 
-      res.json(JSON.parse(response.text || '{"status": "flagged", "notes": ["Error in verification"]}'));
+      const verificationText = response.text || "";
+      console.log("Verification AI RAW Response:", verificationText);
+      
+      try {
+        const result = JSON.parse(verificationText);
+        console.log("Verification finished successfully. Result:", result.status);
+        res.json(result);
+      } catch (parseError) {
+        console.error("Failed to parse AI verification JSON:", verificationText);
+        res.json({ status: "flagged", notes: ["AI response format error during verification"] });
+      }
     } catch (error: any) {
       console.error("Verification endpoint error:", error.message);
       res.status(500).json({ error: error.message });
@@ -134,6 +194,7 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`GEMINI_API_KEY present: ${!!process.env.GEMINI_API_KEY}`);
   });
 }
 

@@ -67,13 +67,19 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     if (response && response.ok) {
       const data = await response.json();
       
+      // If the server returned an error object instead of data
+      if (data.error) {
+        console.warn("Server-side fuel price error:", data.error);
+        throw new Error(data.error);
+      }
+
       // If the server already mapped it (AI fallback on server), return it directly
       if (data['West Malaysia'] && data['East Malaysia']) {
         console.log("Fuel prices received from server (pre-mapped).");
         return data as RegionalFuelPrices;
       }
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         // Filter for 'level' series type to get actual prices, not weekly changes
         const levelData = data.filter((item: any) => item.series_type === 'level');
         if (levelData.length === 0) {
