@@ -55,7 +55,7 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
   try {
     console.log("Attempting fetch from local proxy or data.gov.my...");
     // Try the local proxy first if we are in production or if it's available
-    const proxyUrl = '/api/fuel-prices';
+    const proxyUrl = typeof window !== 'undefined' ? `${window.location.origin}/api/fuel-prices` : '/api/fuel-prices';
     const directUrl = 'https://api.data.gov.my/data-catalogue?id=fuelprice';
     
     let response = await fetch(proxyUrl).catch(() => null);
@@ -66,6 +66,13 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
 
     if (response && response.ok) {
       const data = await response.json();
+      
+      // If the server already mapped it (AI fallback on server), return it directly
+      if (data['West Malaysia'] && data['East Malaysia']) {
+        console.log("Fuel prices received from server (pre-mapped).");
+        return data as RegionalFuelPrices;
+      }
+
       if (Array.isArray(data) && data.length > 0) {
         // Filter for 'level' series type to get actual prices, not weekly changes
         const levelData = data.filter((item: any) => item.series_type === 'level');

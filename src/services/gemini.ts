@@ -53,39 +53,54 @@ export const extractReceiptData = async (base64Image: string): Promise<Partial<P
 
 export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[]): Promise<VerificationResult> => {
   try {
-    const ai = getAI();
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          text: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
-          
-          Current Record:
-          ${JSON.stringify(record, null, 2)}
-          
-          History (Last 5 records):
-          ${JSON.stringify(history.slice(0, 5), null, 2)}
-          
-          Policy Rules:
-          1. Duplicate check: Same date, amount, and station is highly suspicious.
-          2. Consumption check: Unrealistic fuel consumption for standard cars.
-          3. Frequency check: Multiple full tanks on the same day.
-          
-          Return a JSON object:
-          {
-            "status": "verified" | "flagged",
-            "notes": ["List of observations or reasons for flagging"]
-          }`,
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
+    const response = await fetch('/api/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({ record, history }),
     });
 
-    return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error in verification"]}');
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    return await response.json();
   } catch (e) {
-    console.error("Verification failed", e);
-    return { status: "flagged", notes: ["Verification failed to process"] };
+    console.error("Verification failed (server fallback)", e);
+    // Local fallback if server fails and we have a local key
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) throw new Error("No local API key");
+      
+      const ai = getAI();
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            text: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
+            
+            Current Record:
+            ${JSON.stringify(record, null, 2)}
+            
+            History (Last 5 records):
+            ${JSON.stringify(history.slice(0, 5), null, 2)}
+            
+            Return a JSON object:
+            {
+              "status": "verified" | "flagged",
+              "notes": ["List of observations"]
+            }`,
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error in verification"]}');
+    } catch (innerError) {
+      return { status: "flagged", notes: ["Verification failed to process"] };
+    }
   }
 };
