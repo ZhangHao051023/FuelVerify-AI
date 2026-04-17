@@ -51,11 +51,20 @@ const FUEL_PRICE_SCHEMA = {
 };
 
 export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null> {
-  // 1. Try direct fetch from data.gov.my API first
+  // 1. Try local server proxy (to avoid CORS) then direct fetch from data.gov.my API
   try {
-    console.log("Attempting direct fetch from data.gov.my API...");
-    const response = await fetch('https://api.data.gov.my/data-catalogue?id=fuelprice');
-    if (response.ok) {
+    console.log("Attempting fetch from local proxy or data.gov.my...");
+    // Try the local proxy first if we are in production or if it's available
+    const proxyUrl = '/api/fuel-prices';
+    const directUrl = 'https://api.data.gov.my/data-catalogue?id=fuelprice';
+    
+    let response = await fetch(proxyUrl).catch(() => null);
+    if (!response || !response.ok) {
+      console.log("Proxy failed or unavailable, trying direct fetch...");
+      response = await fetch(directUrl);
+    }
+
+    if (response && response.ok) {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
         // Filter for 'level' series type to get actual prices, not weekly changes
