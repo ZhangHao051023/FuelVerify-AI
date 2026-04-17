@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   // API Proxy for Fuel Prices to avoid CORS issues in production
   app.get("/api/fuel-prices", async (req, res) => {
