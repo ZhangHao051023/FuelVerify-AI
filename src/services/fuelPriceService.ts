@@ -53,7 +53,43 @@ const FUEL_PRICE_SCHEMA = {
 };
 
 export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null> {
-  // 1. Try local server proxy (to avoid CORS) then direct fetch from data.gov.my API
+  // 1. Try Gemini AI with search tool ONLY if a client-side key is present (Priority)
+  // This saves the developer's server quota
+  const ai = getAI();
+  if (ai) {
+    const prompt = `Visit https://data.gov.my/data-catalogue/fuelprice and extract the latest fuel prices for Malaysia. 
+    I need:
+    - RON95 Subsidized Price (RM)
+    - RON95 Market Price (Non-subsidized) (RM)
+    - RON97 Price (RM)
+    - Diesel Price for West Malaysia (RM)
+    - Diesel Price for East Malaysia (RM)
+    - RON95 Subsidy Limit (Liters) - should be 200L.
+    
+    Provide the data for both West Malaysia and East Malaysia.`;
+
+    try {
+      console.log("Attempting to fetch fuel prices with Local Gemini AI (Preference)...");
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: FUEL_PRICE_SCHEMA,
+        },
+      });
+
+      if (response.text) {
+        console.log("Fuel prices fetched successfully with Local Gemini AI.");
+        return JSON.parse(response.text.trim()) as RegionalFuelPrices;
+      }
+    } catch (error) {
+      console.warn("Local AI fetch failed, falling back to server paths...", error);
+    }
+  }
+
+  // 2. Try local server proxy (to avoid CORS) then direct fetch from data.gov.my API
   try {
     console.log("Attempting fetch from local proxy or data.gov.my...");
     // Try the local proxy first if we are in production or if it's available
@@ -125,43 +161,6 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     console.warn("Direct fetch from data.gov.my failed (likely CORS), falling back to AI...", error);
   }
 
-  // 2. Fallback to Gemini AI with search tool ONLY if a client-side key is present
-  const ai = getAI();
-  if (!ai) {
-    console.warn("No client-side Gemini API key found. Skipping client-side AI fallback.");
-    return null;
-  }
-
-  const prompt = `Visit https://data.gov.my/data-catalogue/fuelprice and extract the latest fuel prices for Malaysia. 
-  I need:
-  - RON95 Subsidized Price (RM)
-  - RON95 Market Price (Non-subsidized) (RM)
-  - RON97 Price (RM)
-  - Diesel Price for West Malaysia (RM)
-  - Diesel Price for East Malaysia (RM)
-  - RON95 Subsidy Limit (Liters) - should be 200L.
-  
-  Provide the data for both West Malaysia and East Malaysia.`;
-
-  try {
-    console.log("Attempting to fetch fuel prices with Gemini AI (Search Tool)...");
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: FUEL_PRICE_SCHEMA,
-      },
-    });
-
-    if (response.text) {
-      console.log("Fuel prices fetched successfully with Gemini AI.");
-      return JSON.parse(response.text.trim()) as RegionalFuelPrices;
-    }
-  } catch (error) {
-    console.error("All fuel price fetch methods failed:", error);
-    throw error;
-  }
+  // Previous AI search fallback was removed and moved to top as priority
   return null;
 }

@@ -14,33 +14,12 @@ function getAI() {
 }
 
 export const extractReceiptData = async (base64Image: string): Promise<Partial<PetrolRecord>> => {
-  try {
-    const response = await fetch('/api/extract', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ base64Image }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `Server error: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (e: any) {
-    console.warn("Extraction failed via server, checking local fallback...", e.message);
-    
-    // Local fallback if we have a key
+  // 1. Try Local AI first if user provided a key (Priority to save dev cost)
+  const localAi = getAI();
+  if (localAi) {
     try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) return {};
-
-      const ai = getAI();
-      if (!ai) return {};
-
-      const response: GenerateContentResponse = await ai.models.generateContent({
+      console.log("Attempting local AI extraction (User Key)...");
+      const response: GenerateContentResponse = await localAi.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
           {
@@ -69,16 +48,67 @@ export const extractReceiptData = async (base64Image: string): Promise<Partial<P
           responseMimeType: "application/json",
         },
       });
-
       return JSON.parse(response.text || "{}");
-    } catch (innerError) {
-      console.error("Local fallback also failed", innerError);
-      return {};
+    } catch (e) {
+      console.warn("Local extraction failed, falling back to server...", e);
     }
+  }
+
+  // 2. Fallback to Server Proxy (Uses Dev's Key)
+  try {
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ base64Image }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (e: any) {
+    console.error("Failed to extract receipt data via server", e);
+    return {};
   }
 };
 
 export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[]): Promise<VerificationResult> => {
+  // 1. Try Local AI first if user provided a key (Priority)
+  const localAi = getAI();
+  if (localAi) {
+    try {
+      console.log("Attempting local AI verification (User Key)...");
+      const response: GenerateContentResponse = await localAi.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
+            
+            Current Record:
+            ${JSON.stringify(record, null, 2)}
+            
+            History (Last 5 records):
+            ${JSON.stringify(history.slice(0, 5), null, 2)}
+            
+            Return a JSON object:
+            {
+              "status": "verified" | "flagged",
+              "notes": ["List of observations"]
+            }`,
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error parsing local AI response"]}');
+    } catch (e) {
+      console.warn("Local verification failed, falling back to server...", e);
+    }
+  }
+
+  // 2. Fallback to Server Proxy (Uses Dev's Key)
   try {
     const response = await fetch('/api/verify', {
       method: 'POST',
@@ -106,42 +136,10 @@ export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[])
       // Not JSON, keep original
     }
 
-    console.warn("Verification failed (server fallback), attempting local...", errorMessage);
-    // Local fallback if server fails and we have a local key
-    try {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) throw new Error("No local API key available for fallback.");
-      
-      const ai = getAI();
-      if (!ai) throw new Error("AI instance could not be initialized.");
-
-      const response: GenerateContentResponse = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `As a Malaysian government petrol usage auditor, verify this record against the user's history and general policy rules.
-            
-            Current Record:
-            ${JSON.stringify(record, null, 2)}
-            
-            History (Last 5 records):
-            ${JSON.stringify(history.slice(0, 5), null, 2)}
-            
-            Return a JSON object:
-            {
-              "status": "verified" | "flagged",
-              "notes": ["List of observations"]
-            }`,
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
-
-      return JSON.parse(response.text || '{"status": "flagged", "notes": ["Error parsing local AI response"]}');
-    } catch (innerError: any) {
-      console.error("Verification failed completely:", innerError.message);
-      return { 
-        status: "flagged", 
-        notes: [`AI Service Busy: ${errorMessage}. Please check AI Studio credits.`] 
-      };
-    }
+    console.error("Verification failed completely:", errorMessage);
+    return { 
+      status: "flagged", 
+      notes: [`AI Service Busy: ${errorMessage}. Please check AI Studio credits.`] 
+    };
   }
 };

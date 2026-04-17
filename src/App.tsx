@@ -21,7 +21,11 @@ import {
   BarChart3,
   MapPin,
   Tag,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  Eye,
+  EyeOff,
+  Info
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -60,10 +64,16 @@ export default function App() {
     const saved = localStorage.getItem('fuel_zone');
     return (saved as Zone) || 'West Malaysia';
   });
+  const [userApiKey, setUserApiKey] = useState(() => localStorage.getItem('user_gemini_api_key') || '');
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('fuel_zone', zone);
   }, [zone]);
+
+  useEffect(() => {
+    localStorage.setItem('user_gemini_api_key', userApiKey);
+  }, [userApiKey]);
 
   useEffect(() => {
     const updatePrices = async () => {
@@ -435,15 +445,61 @@ export default function App() {
                         <p>{priceUpdateError}</p>
                       </div>
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-500 overflow-hidden">
-                        <p className="font-bold mb-1 uppercase">Infrastructure Status:</p>
-                        <p>Server-side AI Enabled: {!!process.env.GEMINI_API_KEY ? 'YES' : 'NO (Check Cloud Run Variables)'}</p>
-                        <p>Runtime Environment: {process.env.NODE_ENV}</p>
+                        <p className="font-bold mb-1 uppercase text-indigo-600">Infrastructure & Cost Control:</p>
+                        <p>Processing Mode: {userApiKey ? 'Client-Side (Using Your Key)' : 'Server-Side (Using Dev Key)'}</p>
+                        <p>Server Status: Active</p>
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4 pt-6 mt-6 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">Personal API Key</h3>
+                      <p className="text-slate-500 text-sm">Provide your own Gemini API Key to offload usage to your account.</p>
+                    </div>
+                    <div className="rounded-full bg-green-100 p-2 text-green-600">
+                      <Shield className="h-5 w-5" />
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type={showKey ? "text" : "password"}
+                      value={userApiKey}
+                      onChange={(e) => setUserApiKey(e.target.value)}
+                      placeholder="AI Studio API Key (AIza...)"
+                      className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 px-5 py-4 font-mono text-sm focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all pr-12"
+                    />
+                    <button 
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-indigo-50 border border-indigo-100">
+                    <div className="flex gap-3">
+                      <Info className="h-5 w-5 text-indigo-600 shrink-0" />
+                      <div className="text-xs text-indigo-800 space-y-2">
+                        <p><strong>Privacy:</strong> Your key is stored locally in your browser and never sent to our server. It is only used for direct AI calls from your browser.</p>
+                        <p><strong>Benefits:</strong> Using your own key ensures the app remains functional even if global credits are depleted.</p>
+                        <a 
+                          href="https://aistudio.google.com/app/apikey" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="inline-block font-bold underline"
+                        >
+                          Get a free API key here →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-6 mt-6 border-t border-slate-100">
                   <label className="text-sm font-semibold text-slate-700">Select Zone</label>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {(['West Malaysia', 'East Malaysia'] as Zone[]).map((z) => (
