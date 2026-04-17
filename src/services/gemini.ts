@@ -24,49 +24,57 @@ export const extractReceiptData = async (base64Image: string): Promise<Partial<P
     });
 
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
     }
 
     return await response.json();
-  } catch (e) {
-    console.error("Failed to extract receipt data via server, trying local fallback", e);
+  } catch (e: any) {
+    console.warn("Extraction failed via server, checking local fallback...", e.message);
     
     // Local fallback if we have a key
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) return {};
+    try {
+      const apiKey = getGeminiApiKey();
+      if (!apiKey) return {};
 
-    const ai = getAI()!;
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: base64Image,
+      const ai = getAI();
+      if (!ai) return {};
+
+      const response: GenerateContentResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64Image,
+                },
               },
-            },
-            {
-              text: `Extract petrol receipt information from this image. 
-              Return a JSON object with the following fields:
-              - date (ISO format YYYY-MM-DD)
-              - amount (number, MYR)
-              - liters (number)
-              - stationName (string)
-              - type (one of: RON95, RON97, Diesel)
-              
-              If a field is not found, leave it null.`,
-            },
-          ],
+              {
+                text: `Extract petrol receipt information from this image. 
+                Return a JSON object with the following fields:
+                - date (ISO format YYYY-MM-DD)
+                - amount (number, MYR)
+                - liters (number)
+                - stationName (string)
+                - type (one of: RON95, RON97, Diesel)
+                
+                If a field is not found, leave it null.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
         },
-      ],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+      });
 
-    return JSON.parse(response.text || "{}");
+      return JSON.parse(response.text || "{}");
+    } catch (innerError) {
+      console.error("Local fallback also failed", innerError);
+      return {};
+    }
   }
 };
 
@@ -87,7 +95,18 @@ export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[])
 
     return await response.json();
   } catch (e: any) {
-    console.warn("Verification failed (server fallback), attempting local...", e.message);
+    let errorMessage = e.message;
+    try {
+      // Try to parse JSON error if it's a stringified object from the server
+      const parsed = JSON.parse(e.message);
+      if (parsed.error && parsed.error.message) {
+        errorMessage = parsed.error.message;
+      }
+    } catch {
+      // Not JSON, keep original
+    }
+
+    console.warn("Verification failed (server fallback), attempting local...", errorMessage);
     // Local fallback if server fails and we have a local key
     try {
       const apiKey = getGeminiApiKey();
@@ -121,7 +140,7 @@ export const verifyUsage = async (record: PetrolRecord, history: PetrolRecord[])
       console.error("Verification failed completely:", innerError.message);
       return { 
         status: "flagged", 
-        notes: [`Verification unavailable: ${e.message}. Please check if GEMINI_API_KEY is configured in Cloud Run.`] 
+        notes: [`AI Service Busy: ${errorMessage}. Please check AI Studio credits.`] 
       };
     }
   }

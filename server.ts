@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -155,6 +155,21 @@ async function startServer() {
         contents: prompt,
         config: {
           responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              status: { 
+                type: Type.STRING, 
+                description: "One of 'verified' or 'flagged'" 
+              },
+              notes: { 
+                type: Type.ARRAY, 
+                items: { type: Type.STRING },
+                description: "Reasons for the status"
+              }
+            },
+            required: ["status", "notes"]
+          }
         },
       } as any);
 
@@ -200,21 +215,23 @@ async function startServer() {
                 },
               },
               {
-                text: `Extract petrol receipt information from this image. 
-                Return a JSON object with the following fields:
-                - date (ISO format YYYY-MM-DD)
-                - amount (number, MYR)
-                - liters (number)
-                - stationName (string)
-                - type (one of: RON95, RON97, Diesel)
-                
-                If a field is not found, leave it null.`,
+                text: "Extract petrol receipt information from this image.",
               },
             ],
           },
         ],
         config: {
           responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              date: { type: Type.STRING, description: "ISO format YYYY-MM-DD" },
+              amount: { type: Type.NUMBER, description: "Total amount in MYR" },
+              liters: { type: Type.NUMBER, description: "Liters dispensed" },
+              stationName: { type: Type.STRING },
+              type: { type: Type.STRING, description: "RON95, RON97, or Diesel" }
+            }
+          }
         },
       } as any);
 
