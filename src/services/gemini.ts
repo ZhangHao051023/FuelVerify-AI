@@ -5,15 +5,37 @@ import { getGeminiApiKey } from "../lib/config";
 let aiInstance: GoogleGenAI | null = null;
 
 function getAI() {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return null;
   if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+    aiInstance = new GoogleGenAI({ apiKey });
   }
   return aiInstance;
 }
 
 export const extractReceiptData = async (base64Image: string): Promise<Partial<PetrolRecord>> => {
   try {
-    const ai = getAI();
+    const response = await fetch('/api/extract', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ base64Image }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (e) {
+    console.error("Failed to extract receipt data via server, trying local fallback", e);
+    
+    // Local fallback if we have a key
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) return {};
+
+    const ai = getAI()!;
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
@@ -45,9 +67,6 @@ export const extractReceiptData = async (base64Image: string): Promise<Partial<P
     });
 
     return JSON.parse(response.text || "{}");
-  } catch (e) {
-    console.error("Failed to extract receipt data", e);
-    return {};
   }
 };
 

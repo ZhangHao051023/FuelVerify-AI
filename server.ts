@@ -175,6 +175,57 @@ async function startServer() {
     }
   });
 
+  // AI Extraction Endpoint
+  app.post("/api/extract", express.json({ limit: '10mb' }), async (req, res) => {
+    try {
+      const { base64Image } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.error("Extraction failed: GEMINI_API_KEY not found in environment.");
+        return res.status(500).json({ error: "GEMINI_API_KEY is missing on server." });
+      }
+
+      console.log("Starting AI receipt extraction...");
+      const client = new GoogleGenAI({ apiKey });
+      const response = await client.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64Image,
+                },
+              },
+              {
+                text: `Extract petrol receipt information from this image. 
+                Return a JSON object with the following fields:
+                - date (ISO format YYYY-MM-DD)
+                - amount (number, MYR)
+                - liters (number)
+                - stationName (string)
+                - type (one of: RON95, RON97, Diesel)
+                
+                If a field is not found, leave it null.`,
+              },
+            ],
+          },
+        ],
+        config: {
+          responseMimeType: "application/json",
+        },
+      } as any);
+
+      console.log("Extraction AI finished.");
+      res.json(JSON.parse(response.text || "{}"));
+    } catch (error: any) {
+      console.error("Extraction endpoint error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

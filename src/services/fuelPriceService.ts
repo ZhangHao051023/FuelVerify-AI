@@ -5,8 +5,10 @@ import { getGeminiApiKey } from "../lib/config";
 let aiInstance: GoogleGenAI | null = null;
 
 function getAI() {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return null;
   if (!aiInstance) {
-    aiInstance = new GoogleGenAI({ apiKey: getGeminiApiKey() });
+    aiInstance = new GoogleGenAI({ apiKey });
   }
   return aiInstance;
 }
@@ -123,8 +125,13 @@ export async function fetchLatestFuelPrices(): Promise<RegionalFuelPrices | null
     console.warn("Direct fetch from data.gov.my failed (likely CORS), falling back to AI...", error);
   }
 
-  // 2. Fallback to Gemini AI with search tool, specifically targeting the requested URL
+  // 2. Fallback to Gemini AI with search tool ONLY if a client-side key is present
   const ai = getAI();
+  if (!ai) {
+    console.warn("No client-side Gemini API key found. Skipping client-side AI fallback.");
+    return null;
+  }
+
   const prompt = `Visit https://data.gov.my/data-catalogue/fuelprice and extract the latest fuel prices for Malaysia. 
   I need:
   - RON95 Subsidized Price (RM)

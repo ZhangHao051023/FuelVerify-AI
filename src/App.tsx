@@ -67,11 +67,6 @@ export default function App() {
 
   useEffect(() => {
     const updatePrices = async () => {
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
-        return;
-      }
       setIsUpdatingPrices(true);
       setPriceUpdateError(null);
       try {
@@ -83,8 +78,8 @@ export default function App() {
         }
       } catch (err: any) {
         console.error("Price update error:", err);
-        const errorMessage = err?.message || "Unknown API Error";
-        setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
+        const errorMessage = err?.message || "Unknown Error";
+        setPriceUpdateError(`Update Error: ${errorMessage}. The server is attempting to fetch data automatically.`);
       } finally {
         setIsUpdatingPrices(false);
       }
@@ -407,11 +402,6 @@ export default function App() {
                     <button 
                       onClick={() => {
                         const updatePrices = async () => {
-                          const apiKey = getGeminiApiKey();
-                          if (!apiKey) {
-                            setPriceUpdateError("Gemini API Key is missing. If you just added it to Cloudflare, you MUST trigger a NEW DEPLOYMENT for the changes to take effect.");
-                            return;
-                          }
                           setIsUpdatingPrices(true);
                           setPriceUpdateError(null);
                           try {
@@ -423,8 +413,8 @@ export default function App() {
                             }
                           } catch (err: any) {
                             console.error("Price update error:", err);
-                            const errorMessage = err?.message || "Unknown API Error";
-                            setPriceUpdateError(`API Error: ${errorMessage}. Please check your Gemini API key configuration.`);
+                            const errorMessage = err?.message || "Unknown Error";
+                            setPriceUpdateError(`Update Error: ${errorMessage}. The server handles AI searches automatically if you provided a key in Cloud Run.`);
                           } finally {
                             setIsUpdatingPrices(false);
                           }
@@ -445,10 +435,9 @@ export default function App() {
                         <p>{priceUpdateError}</p>
                       </div>
                       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-500 overflow-hidden">
-                        <p className="font-bold mb-1 uppercase">Debug Info:</p>
-                        <p>VITE_GEMINI_API_KEY: {(import.meta as any).env.VITE_GEMINI_API_KEY ? 'Detected (' + (import.meta as any).env.VITE_GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
-                        <p>GEMINI_API_KEY (env): {process.env.GEMINI_API_KEY ? 'Detected (' + process.env.GEMINI_API_KEY.substring(0, 4) + '...)' : 'Not Found'}</p>
-                        <p>NODE_ENV: {process.env.NODE_ENV}</p>
+                        <p className="font-bold mb-1 uppercase">Infrastructure Status:</p>
+                        <p>Server-side AI Enabled: {!!process.env.GEMINI_API_KEY ? 'YES' : 'NO (Check Cloud Run Variables)'}</p>
+                        <p>Runtime Environment: {process.env.NODE_ENV}</p>
                       </div>
                     </div>
                   )}
